@@ -1,0 +1,106 @@
+.hangman-drawing-container {
+  position: relative;
+  width: 250px; /* Increased width for better spacing */
+  height: 300px; /* Increased height for better spacing */
+  margin: 20px auto; /* Center the drawing */
+}
+
+/* Gallow parts */
+.gallow-base {
+  height: 10px;
+  width: 150px; /* Wider base */
+  background: #543d2b; /* Darker wood color */
+  position: absolute;
+  bottom: 0;
+  left: 50px; /* Adjust to center with new width */
+}
+
+.gallow-pole {
+  height: 280px; /* Taller pole */
+  width: 10px;
+  background: #543d2b;
+  position: absolute;
+  bottom: 10px; /* Sits on top of the base */
+  left: 70px; /* Adjust for base centering */
+}
+
+.gallow-top {
+  height: 10px;
+  width: 130px; /* Shorter top bar */
+  background: #543d2b;
+  position: absolute;
+  top: 0;
+  left: 70px; /* Aligns with the pole */
+}
+
+.gallow-rope {
+  width: 5px; /* Thinner rope */
+  height: 50px;
+  background: #8b4513; /* SaddleBrown for rope */
+  position: absolute;
+  top: 10px; /* Hangs from the top bar */
+  right: 50px; /* Positioned to the right end of the top bar */
+}
+
+/* Hangman body parts */
+.hangman-part {
+  background-color: black;
+  position: absolute;
+}
+
+.head {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  border: 5px solid black;
+  background-color: white; /* Keep head outline */
+  top: 55px; /* Below the rope */
+  right: 27.5px; /* Centered under the rope */
+  box-sizing: border-box;
+}
+
+.body {
+  width: 10px;
+  height: 90px; /* Shorter body */
+  top: 105px; /* Connects to head */
+  right: 47.5px; /* Aligned with head center */
+}
+
+.left-arm {
+  width: 60px; /* Longer arms */
+  height: 10px;
+  top: 120px;
+  right: 52.5px; /* Extends from body */
+  transform: rotate(30deg);
+  transform-origin: left bottom;
+}
+
+.right-arm {
+  width: 60px;
+  height: 10px;
+  top: 120px;
+  right: -2.5px; /* Extends from body to the right */
+  transform: rotate(-30deg);
+  transform-origin: right bottom;
+}
+
+.left-leg {
+  width: 70px; /* Longer legs */
+  height: 10px;
+  top: 185px; /* Connects to bottom of body */
+  left: 202.5px; /* Aligns left-top origin with body's right edge */
+  transform: rotate(60deg);
+  transform-origin: left top;
+}
+
+/* No right leg for 5 wrong guesses, if you want a 6th part, add it here */
+/* Example for a 6th part (e.g., right leg if MAX_WRONG_GUESSES was 6) */
+.right-leg {
+  width: 70px;
+  height: 10px;
+  top: 185px;
+  left: 122.5px; /* Positions element so its right-top origin aligns with body's left edge */
+  transform: rotate(-60deg);
+  transform-origin: right top;
+}
+

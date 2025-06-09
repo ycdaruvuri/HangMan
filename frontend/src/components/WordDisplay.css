@@ -1,0 +1,27 @@
+.word-display-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px; /* Space between letters */
+  margin: 20px 0;
+  min-height: 40px; /* Ensure it has some height even when loading */
+}
+
+.word-display-container.loading {
+  font-style: italic;
+  color: #777;
+}
+
+.letter-placeholder {
+  font-size: 2em; /* Larger letters */
+  font-weight: bold;
+  color: #333;
+  width: 30px; /* Fixed width for each letter space */
+  height: 40px; /* Fixed height */
+  display: inline-flex; /* Use inline-flex for centering content */
+  justify-content: center;
+  align-items: center;
+  border-bottom: 3px solid #333; /* Underline for unguessed letters */
+  margin: 0 2px; /* Small margin between placeholders */
+  text-transform: uppercase; /* Display guessed letters in uppercase */
+}

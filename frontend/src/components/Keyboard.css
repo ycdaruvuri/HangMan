@@ -1,0 +1,41 @@
+.keyboard-container {
+  display: flex;
+  flex-wrap: wrap; /* Allow keys to wrap to the next line */
+  justify-content: center;
+  gap: 8px; /* Space between keys */
+  margin-top: 20px;
+  max-width: 500px; /* Limit width to prevent overly wide layout */
+}
+
+.key {
+  background-color: #e0e0e0; /* Light grey */
+  border: 1px solid #bdbdbd; /* Slightly darker grey border */
+  border-radius: 4px;
+  padding: 10px 12px;
+  font-size: 1.1em;
+  font-weight: bold;
+  color: #333;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+  min-width: 40px; /* Ensure keys have a minimum width */
+  text-align: center;
+}
+
+.key:hover:not(:disabled) {
+  background-color: #d1d1d1; /* Darker grey on hover */
+}
+
+.key:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.key.guessed {
+  background-color: #a0a0a0; /* Darker grey for guessed letters */
+  color: #666;
+  cursor: not-allowed;
+}
+
+.key:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
