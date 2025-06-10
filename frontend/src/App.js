@@ -18,18 +18,21 @@ function App() {
   const [hintButtonUsed, setHintButtonUsed] = useState(false);
   const [hintLoading, setHintLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const fetchWord = useCallback(async () => {
+  const [selectedCategory, setSelectedCategory] = useState('english'); // 'english' or 'telugu_movies'
+  const [hintContext, setHintContext] = useState(null); // To store movie ID or other hint context
+  const fetchWord = useCallback(async (category) => { // Added category parameter
     setGameStatus('loading');
     setErrorMessage('');
     setWordToGuess('');
     try {
-      const response = await axios.get(`${BACKEND_URL}/word`);
-      const newWord = response.data.word;
-      if (newWord && typeof newWord === 'string' && newWord.length > 0) {
-        setWordToGuess(newWord.toLowerCase());
+      const response = await axios.get(`${BACKEND_URL}/word?category=${category}`);
+      const { word, hint_context } = response.data;
+      if (word && typeof word === 'string' && word.length > 0) {
+        setWordToGuess(word.toLowerCase());
+        setHintContext(hint_context || null); // Store hint context if it exists
         setGameStatus('playing');
       } else {
-        throw new Error("Invalid word received from API");
+        throw new Error("Invalid data received from API");
       }
     } catch (err) {
       console.error("Failed to fetch word:", err);
@@ -38,7 +41,7 @@ function App() {
       setWordToGuess(defaultWords[Math.floor(Math.random() * defaultWords.length)]);
       setGameStatus('playing'); // Still allow playing with default word
     }
-  }, []);
+  }, []); // Keep dependencies minimal for fetchWord itself, category is passed in.
 
   const resetGame = useCallback(() => {
     setGuessedLetters([]);
@@ -47,29 +50,47 @@ function App() {
     setShowHint(false);
     setHintButtonUsed(false);
     setHintLoading(false);
-    fetchWord();
-  }, [fetchWord]);
+    setHintContext(null); // Also reset hint context
+    fetchWord(selectedCategory); // Pass current category to fetchWord
+  }, [fetchWord, selectedCategory]);
 
   useEffect(() => {
-    resetGame(); // Initial game setup
-  }, [resetGame]);
+    // On initial load, fetch word with default category
+    fetchWord(selectedCategory);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only on mount to fetch initial word
+
+  // Separate useEffect for resetting game when category changes AFTER initial load
+  useEffect(() => {
+    // Avoid resetting on initial mount if fetchWord already ran
+    // This effect is specifically for when user *changes* the category
+    if (wordToGuess) { // Check if a word already exists (i.e., not initial load)
+        console.log(`Category changed to: ${selectedCategory}, resetting game.`);
+        resetGame();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategory]); // resetGame dependency will be handled by its own useCallback
 
   const handleGuess = useCallback((letter) => {
-    if (gameStatus !== 'playing' || guessedLetters.includes(letter) || !wordToGuess) {
+    const lowerCaseLetter = letter.toLowerCase();
+    if (gameStatus !== 'playing' || guessedLetters.includes(lowerCaseLetter) || !wordToGuess) {
       return;
     }
 
-    const newGuessedLetters = [...guessedLetters, letter];
+    const newGuessedLetters = [...guessedLetters, lowerCaseLetter];
     setGuessedLetters(newGuessedLetters);
 
-    if (wordToGuess.includes(letter)) {
+    if (wordToGuess.toLowerCase().includes(lowerCaseLetter)) {
+      // Correct guess
       const wordGuessed = wordToGuess
+        .toLowerCase()
         .split('')
-        .every(char => newGuessedLetters.includes(char.toLowerCase()));
+        .every(char => newGuessedLetters.includes(char) || char === ' '); // Spaces are considered revealed
       if (wordGuessed) {
         setGameStatus('won');
       }
     } else {
+      // Incorrect guess
       const newWrongGuesses = wrongGuesses + 1;
       setWrongGuesses(newWrongGuesses);
       if (newWrongGuesses >= MAX_WRONG_GUESSES) {
@@ -86,11 +107,23 @@ function App() {
     setShowHint(true); // Show the area where hint/loading message will appear
 
     try {
-      const response = await axios.get(`${BACKEND_URL}/word/${wordToGuess}/definitions`);
-      if (response.data && response.data.definition) {
-        setHint(response.data.definition);
+      let response;
+      // Check if we have movie-specific context
+      if (hintContext && hintContext.type === 'movie') {
+        response = await axios.get(`${BACKEND_URL}/movie/${hintContext.id}/hint`);
+        if (response.data && response.data.hint) {
+          setHint(response.data.hint);
+        } else {
+          setHint('Could not find a hint for this movie.');
+        }
       } else {
-        setHint('No definition found for this word.');
+        // Default to fetching word definition
+        response = await axios.get(`${BACKEND_URL}/word/${wordToGuess}/definitions`);
+        if (response.data && response.data.definition) {
+          setHint(response.data.definition);
+        } else {
+          setHint('No definition found for this word.');
+        }
       }
     } catch (error) {
       console.error("Failed to fetch hint:", error);
@@ -102,7 +135,7 @@ function App() {
     }
     setHintButtonUsed(true);
     setHintLoading(false);
-  }, [wordToGuess, hintButtonUsed]);
+  }, [wordToGuess, hintButtonUsed, hintContext]); // Added hintContext to dependencies
 
   let statusDisplayMessage = '';
   let statusClass = '';
@@ -124,6 +157,23 @@ function App() {
     <div className="App">
       <header className="App-header">
         <h1>Hangman Game</h1>
+        <div className="category-selector">
+          <label>Choose Category: </label>
+          <button 
+            onClick={() => setSelectedCategory('english')} 
+            className={selectedCategory === 'english' ? 'active' : ''}
+            disabled={gameStatus === 'loading'}
+          >
+            English Words
+          </button>
+          <button 
+            onClick={() => setSelectedCategory('telugu_movies')} 
+            className={selectedCategory === 'telugu_movies' ? 'active' : ''}
+            disabled={gameStatus === 'loading'}
+          >
+            Telugu Movies
+          </button>
+        </div>
       </header>
       <div className="game-area">
         <HangmanDrawing numberOfWrongGuesses={wrongGuesses} />
