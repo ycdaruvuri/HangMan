@@ -26,13 +26,115 @@ app.add_middleware(
 )
 
 WORDS_API_KEY = os.getenv("WORDS_API_KEY")
-WORDS_API_HOST = os.getenv("WORDS_API_HOST", "wordsapiv1.p.rapidapi.com")
+WORDS_API_HOST = os.getenv("WORDS_API_HOST")
+TMDB_API_KEY = os.getenv("TMDB_API_KEY")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 MIN_WORD_LENGTH_API = 4
 MAX_WORD_LENGTH_API = 10
 
-MAX_API_RETRIES = 1 # Reduced retries
+MAX_API_RETRIES = 1 # Max number of retries for external APIs
+
+# Constants for TMDB
+TMDB_BASE_URL = "https://api.themoviedb.org/3"
+MIN_MOVIE_TITLE_LENGTH = 3
+MAX_MOVIE_TITLE_LENGTH = 30 # Adjust as needed for playability
+
 RETRY_DELAY_SECONDS = 1
+import re # For processing movie titles
+import random # For selecting random movie/page
+
+def process_movie_title(title: str) -> str:
+    """
+    Processes a movie title for Hangman:
+    - Converts to uppercase.
+    - Removes characters that are not alphanumeric or space.
+    - Ensures it's within reasonable length limits.
+    - Trims leading/trailing whitespace.
+    """
+    if not title:
+        return ""
+    
+    # Keep alphanumeric and spaces, remove others. Allow basic punctuation if desired.
+    processed_title = re.sub(r'[^a-zA-Z0-9\s]', '', title) # Example: only letters, numbers, spaces
+    processed_title = processed_title.upper()
+    
+    # Trim and ensure it's not just spaces or empty after processing
+    processed_title = processed_title.strip()
+    if not processed_title:
+        return ""
+
+    # Optional: Collapse multiple spaces to one, though Hangman can reveal multiple spaces
+    # processed_title = re.sub(r'\s+', ' ', processed_title)
+
+    if MIN_MOVIE_TITLE_LENGTH <= len(processed_title) <= MAX_MOVIE_TITLE_LENGTH:
+        return processed_title
+    return ""
+
+def get_telugu_movie_from_tmdb():
+    if not TMDB_API_KEY:
+        print("Error: TMDB_API_KEY not configured in .env file.")
+        return None
+
+    url = f"{TMDB_BASE_URL}/discover/movie"
+    # Fetch from a few pages to get variety but prioritize popular ones
+    # TMDB pages are 1-indexed
+    page_to_fetch = random.randint(1, 5) 
+    params = {
+        "api_key": TMDB_API_KEY,
+        "with_original_language": "te",
+        "sort_by": "popularity.desc",
+        "page": page_to_fetch,
+        "include_adult": "false" # Explicitly exclude adult content
+    }
+    
+    print(f"Fetching Telugu movies from TMDB: {url} with params: {params}")
+    
+    for attempt in range(MAX_API_RETRIES):
+        try:
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            results = data.get("results")
+
+            if results:
+                valid_movies = []
+                for movie in results:
+                    title = movie.get("original_title") or movie.get("title")
+                    movie_id = movie.get("id")
+                    
+                    if title and movie_id:
+                        processed_title = process_movie_title(title)
+                        if processed_title and any(char.isalpha() for char in processed_title):
+                            valid_movies.append({"title": processed_title, "id": movie_id})
+                
+                if valid_movies:
+                    selected_movie = random.choice(valid_movies)
+                    print(f"Successfully fetched and processed Telugu movie: {selected_movie}")
+                    return {"word": selected_movie['title'], "id": selected_movie['id']} 
+            
+            error_detail = data.get("status_message", "No suitable movie titles found") if results is None or not valid_titles else "No suitable movie titles found"
+            print(f"{error_detail} in TMDB response on attempt {attempt + 1}. Page: {page_to_fetch}. Results count: {len(results) if results else 0}")
+
+        except requests.exceptions.Timeout:
+            print(f"TMDB API request timed out on attempt {attempt + 1}.")
+        except requests.exceptions.RequestException as e:
+            status_code = e.response.status_code if e.response is not None else "N/A"
+            error_msg = str(e)
+            if e.response is not None:
+                try:
+                    error_msg = e.response.json().get("status_message", str(e))
+                except ValueError: # Not JSON response
+                    error_msg = e.response.text[:200] # First 200 chars of non-JSON error
+            print(f"TMDB API request failed on attempt {attempt + 1}. Status: {status_code}. Error: {error_msg}")
+        except Exception as e:
+            print(f"An unexpected error occurred fetching from TMDB on attempt {attempt + 1}: {e}")
+        
+        if attempt < MAX_API_RETRIES - 1:
+            print(f"Retrying TMDB fetch in {RETRY_DELAY_SECONDS} seconds...")
+            time.sleep(RETRY_DELAY_SECONDS)
+            
+    return None
 
 def get_word_from_wordsapi():
     if not WORDS_API_KEY or not WORDS_API_HOST:
@@ -86,14 +188,91 @@ def get_word_from_wordsapi():
     return None
 
 @app.get("/word")
-async def get_word_endpoint():
-    word_data = get_word_from_wordsapi()
-    if word_data and word_data.get("word"):
-        # word_data will now be like {"word": "example"}
-        return word_data 
+async def get_word_endpoint(category: str = "english"):
+    print(f"Received request for category: {category}")
+    word_data = None
+    error_detail = "Could not retrieve a suitable word/phrase."
+
+    if category.lower() == "english":
+        word_info = get_word_from_wordsapi()
+        if word_info:
+            # For English words, hint context is not needed as it's fetched by word.
+            word_data = {"word": word_info["word"]}
+        else:
+            error_detail = "Failed to retrieve an English word from WordsAPI."
+
+    elif category.lower() == "telugu_movies":
+        movie_data = get_telugu_movie_from_tmdb()
+        if movie_data:
+            # For movies, we package the ID so the frontend knows how to get a hint.
+            word_data = {
+                "word": movie_data["word"],
+                "hint_context": {"type": "movie", "id": movie_data["id"]}
+            }
+        else:
+            error_detail = "Failed to retrieve a Telugu movie title from TMDB."
     else:
-        # If MAX_API_RETRIES is 1, "multiple attempts" might be misleading, but the core issue is failure.
-        raise HTTPException(status_code=503, detail="Could not retrieve a word from the external API.")
+        raise HTTPException(status_code=400, detail=f"Invalid category specified: {category}. Supported categories: 'english', 'telugu_movies'.")
+
+    # This is the single point of return for all successful requests.
+    if word_data:
+        print(f"BACKEND LOG: Sending final response to frontend: {word_data}")
+        return word_data
+    else:
+        # This is the single point of failure if no data was retrieved.
+        print(f"Final attempt failed for category '{category}'. Error: {error_detail}")
+        raise HTTPException(status_code=503, detail=error_detail)
+
+@app.get("/movie/{movie_id}/hint")
+async def get_movie_hint_endpoint(movie_id: int):
+    if not TMDB_API_KEY:
+        raise HTTPException(status_code=500, detail="TMDB API key not configured on server.")
+
+    url = f"{TMDB_BASE_URL}/movie/{movie_id}/credits"
+    params = {"api_key": TMDB_API_KEY}
+    
+    print(f"Fetching credits for movie ID: {movie_id}")
+    
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        cast = data.get("cast", [])
+        crew = data.get("crew", [])
+        
+        possible_hints = []
+
+        # Get main actors
+        main_actors = [actor for actor in cast if actor.get("known_for_department") == "Acting" and actor.get("order") <= 4]
+        for actor in main_actors:
+            if actor.get("name"):
+                possible_hints.append(f"Hint: Starring {actor['name']}.")
+
+        # Get director
+        directors = [member for member in crew if member.get("job") == "Director"]
+        for director in directors:
+            if director.get("name"):
+                possible_hints.append(f"Hint: Directed by {director['name']}.")
+
+        if possible_hints:
+            selected_hint = random.choice(possible_hints)
+            return {"hint": selected_hint}
+
+        # Fallback if no specific hints found but cast exists
+        if cast:
+            any_actor = random.choice([actor for actor in cast if actor.get("name")])
+            if any_actor:
+                 return {"hint": f"Hint: One of the cast members is {any_actor['name']}."}
+
+        raise HTTPException(status_code=404, detail="Could not find cast or crew information for this movie.")
+
+    except requests.exceptions.RequestException as e:
+        print(f"TMDB API request for credits failed: {e}")
+        raise HTTPException(status_code=503, detail="Failed to fetch hint from external API.")
+    except Exception as e:
+        print(f"An unexpected error occurred fetching movie hint: {e}")
+        raise HTTPException(status_code=500, detail="An internal error occurred while fetching the hint.")
 
 @app.get("/word/{word_to_define}/definitions")
 async def get_word_definition_endpoint(word_to_define: str):
