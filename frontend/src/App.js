@@ -20,6 +20,26 @@ function App() {
   const [errorMessage, setErrorMessage] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('english'); // 'english' or 'telugu_movies'
   const [hintContext, setHintContext] = useState(null); // To store movie ID or other hint context
+
+  const playSound = useCallback((soundFile) => {
+    try {
+      // Sounds are in the public folder, so the path is relative to the root.
+      const sound = new Audio(`/${soundFile}`);
+      sound.play().catch(error => {
+        // Autoplay was prevented or another error occurred
+        if (error.name === 'NotAllowedError') {
+          // Log a less intrusive message or do nothing
+          console.log(`Autoplay prevented for ${soundFile}. User interaction needed.`);
+        } else {
+          // Log other errors normally
+          console.error(`Could not play sound: ${soundFile}`, error);
+        }
+      });
+    } catch (error) {
+      // This outer catch is for errors during new Audio() instantiation, etc.
+      console.error(`Error initializing sound ${soundFile}:`, error);
+    }
+  }, []);
   const fetchWord = useCallback(async (category) => { // Added category parameter
     setGameStatus('loading');
     setErrorMessage('');
@@ -73,31 +93,45 @@ function App() {
 
   const handleGuess = useCallback((letter) => {
     const lowerCaseLetter = letter.toLowerCase();
-    if (gameStatus !== 'playing' || guessedLetters.includes(lowerCaseLetter) || !wordToGuess) {
+    // Prevent guessing if game is not in play or letter has been guessed
+    if (gameStatus !== 'playing' || guessedLetters.includes(lowerCaseLetter)) {
       return;
     }
 
-    const newGuessedLetters = [...guessedLetters, lowerCaseLetter];
-    setGuessedLetters(newGuessedLetters);
+    setGuessedLetters(prev => [...prev, lowerCaseLetter]);
 
     if (wordToGuess.toLowerCase().includes(lowerCaseLetter)) {
-      // Correct guess
-      const wordGuessed = wordToGuess
-        .toLowerCase()
-        .split('')
-        .every(char => newGuessedLetters.includes(char) || char === ' '); // Spaces are considered revealed
-      if (wordGuessed) {
-        setGameStatus('won');
-      }
+      playSound('sounds/correct.mp3');
     } else {
-      // Incorrect guess
-      const newWrongGuesses = wrongGuesses + 1;
-      setWrongGuesses(newWrongGuesses);
-      if (newWrongGuesses >= MAX_WRONG_GUESSES) {
-        setGameStatus('lost');
-      }
+      setWrongGuesses(prev => prev + 1);
+      playSound('sounds/incorrect.mp3');
     }
-  }, [wordToGuess, guessedLetters, wrongGuesses, gameStatus]);
+  }, [gameStatus, guessedLetters, wordToGuess, playSound]);
+
+  // Effect to check for win/loss condition
+  useEffect(() => {
+    if (gameStatus !== 'playing') return;
+
+    const isWinner = wordToGuess
+      .toLowerCase()
+      .split('')
+      .every(char => guessedLetters.includes(char) || char === ' ');
+
+    if (isWinner) {
+      setGameStatus('win');
+    } else if (wrongGuesses >= MAX_WRONG_GUESSES) {
+      setGameStatus('lose');
+    }
+  }, [guessedLetters, wrongGuesses, wordToGuess, gameStatus]);
+
+  // Effect to play sounds on win/loss
+  useEffect(() => {
+    if (gameStatus === 'win') {
+      playSound('sounds/win.mp3');
+    } else if (gameStatus === 'lose') {
+      playSound('sounds/lose.mp3');
+    }
+  }, [gameStatus, playSound]);
 
   const handleShowHint = useCallback(async () => {
     if (!wordToGuess || hintButtonUsed) return;
@@ -145,10 +179,10 @@ function App() {
   } else if (errorMessage) {
     statusDisplayMessage = errorMessage;
     statusClass = 'error';
-  } else if (gameStatus === 'won') {
+  } else if (gameStatus === 'win') {
     statusDisplayMessage = 'Congratulations! You won!';
     statusClass = 'win';
-  } else if (gameStatus === 'lost') {
+  } else if (gameStatus === 'lose') {
     statusDisplayMessage = `Game Over! The word was: ${wordToGuess.toUpperCase()}`;
     statusClass = 'lose';
   }
@@ -205,7 +239,7 @@ function App() {
           />
         )}
 
-        {(gameStatus === 'won' || gameStatus === 'lost' || (errorMessage && gameStatus !== 'loading')) && (
+        {(gameStatus === 'win' || gameStatus === 'lose' || (errorMessage && gameStatus !== 'loading')) && (
           <button onClick={resetGame} className="reset-button" disabled={gameStatus === 'loading'}>
             {gameStatus === 'loading' ? 'Loading...' : 'Play Again'}
           </button>

@@ -17,6 +17,7 @@ origins = [
     "http://127.0.0.1:3000",
 ]
 
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -24,6 +25,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 WORDS_API_KEY = os.getenv("WORDS_API_KEY")
 WORDS_API_HOST = os.getenv("WORDS_API_HOST")
@@ -113,7 +115,7 @@ def get_telugu_movie_from_tmdb():
                     print(f"Successfully fetched and processed Telugu movie: {selected_movie}")
                     return {"word": selected_movie['title'], "id": selected_movie['id']} 
             
-            error_detail = data.get("status_message", "No suitable movie titles found") if results is None or not valid_titles else "No suitable movie titles found"
+            error_detail = data.get("status_message", "No suitable movie titles found") if results is None or not valid_movies else "No suitable movie titles found"
             print(f"{error_detail} in TMDB response on attempt {attempt + 1}. Page: {page_to_fetch}. Results count: {len(results) if results else 0}")
 
         except requests.exceptions.Timeout:
