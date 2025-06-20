@@ -40,28 +40,34 @@ function App() {
       console.error(`Error initializing sound ${soundFile}:`, error);
     }
   }, []);
-  const fetchWord = useCallback(async (category) => { // Added category parameter
+  const fetchWord = useCallback(async (category) => {
     setGameStatus('loading');
     setErrorMessage('');
     setWordToGuess('');
+    setHintContext(null); // Reset hint context on new word fetch
+
     try {
       const response = await axios.get(`${BACKEND_URL}/word?category=${category}`);
       const { word, hint_context } = response.data;
       if (word && typeof word === 'string' && word.length > 0) {
         setWordToGuess(word.toLowerCase());
-        setHintContext(hint_context || null); // Store hint context if it exists
+        setHintContext(hint_context || null); // Store the entire hint context object
         setGameStatus('playing');
       } else {
-        throw new Error("Invalid data received from API");
+        throw new Error("Invalid data received from server");
       }
     } catch (err) {
       console.error("Failed to fetch word:", err);
-      setErrorMessage('Failed to fetch a new word. Using a default word.');
-      const defaultWords = ["react", "python", "hangman", "cascade"];
-      setWordToGuess(defaultWords[Math.floor(Math.random() * defaultWords.length)]);
-      setGameStatus('playing'); // Still allow playing with default word
+      // Display specific error from backend if available, otherwise generic message
+      const detail = err.response?.data?.detail;
+      if (detail) {
+        setErrorMessage(detail);
+      } else {
+        setErrorMessage('Failed to fetch a new word. The server might be down.');
+      }
+      setGameStatus('error'); // Set a distinct error status
     }
-  }, []); // Keep dependencies minimal for fetchWord itself, category is passed in.
+  }, []); // No dependencies needed as category is passed in
 
   const resetGame = useCallback(() => {
     setGuessedLetters([]);
@@ -133,43 +139,53 @@ function App() {
     }
   }, [gameStatus, playSound]);
 
-  const handleShowHint = useCallback(async () => {
+  const handleShowHint = useCallback(() => {
     if (!wordToGuess || hintButtonUsed) return;
 
-    setHintLoading(true);
-    setHint('');
-    setShowHint(true); // Show the area where hint/loading message will appear
-
-    try {
-      let response;
-      // Check if we have movie-specific context
-      if (hintContext && hintContext.type === 'movie') {
-        response = await axios.get(`${BACKEND_URL}/movie/${hintContext.id}/hint`);
-        if (response.data && response.data.hint) {
-          setHint(response.data.hint);
-        } else {
-          setHint('Could not find a hint for this movie.');
-        }
-      } else {
-        // Default to fetching word definition
-        response = await axios.get(`${BACKEND_URL}/word/${wordToGuess}/definitions`);
-        if (response.data && response.data.definition) {
-          setHint(response.data.definition);
-        } else {
-          setHint('No definition found for this word.');
-        }
-      }
-    } catch (error) {
-      console.error("Failed to fetch hint:", error);
-      if (error.response && error.response.data && error.response.data.detail) {
-        setHint(`Hint Error: ${error.response.data.detail}`);
-      } else {
-        setHint('Could not fetch hint at this time.');
-      }
+    // Guard against showing hint if context is not available
+    if (!hintContext) {
+      setHint('No hint is available for this word.');
+      setShowHint(true);
+      setHintButtonUsed(true);
+      return;
     }
+
+    setHintLoading(true);
+    setShowHint(true);
+
+    const possibleHints = [];
+    // For English Words
+    if (hintContext.definition) {
+      possibleHints.push(`Definition: ${hintContext.definition}`);
+    }
+    if (hintContext.antonym) {
+      possibleHints.push(`Antonym: ${hintContext.antonym}`);
+    }
+    // For Telugu Movies
+    if (hintContext.lead_actor) {
+      possibleHints.push(`Lead Actor: ${hintContext.lead_actor}`);
+    }
+    if (hintContext.lead_actress) {
+      possibleHints.push(`Lead Actress: ${hintContext.lead_actress}`);
+    }
+    if (hintContext.director) {
+      possibleHints.push(`Director: ${hintContext.director}`);
+    }
+    if (hintContext.release_date) {
+      possibleHints.push(`Released on: ${hintContext.release_date}`);
+    }
+
+    if (possibleHints.length > 0) {
+      // Select a random hint from the available options
+      const randomIndex = Math.floor(Math.random() * possibleHints.length);
+      setHint(possibleHints[randomIndex]);
+    } else {
+      setHint('No specific hint found, try your best!');
+    }
+
     setHintButtonUsed(true);
     setHintLoading(false);
-  }, [wordToGuess, hintButtonUsed, hintContext]); // Added hintContext to dependencies
+  }, [wordToGuess, hintButtonUsed, hintContext]);
 
   let statusDisplayMessage = '';
   let statusClass = '';
